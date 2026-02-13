@@ -11,6 +11,7 @@ final class ECGViewModel: ObservableObject {
     private let loader = ECGFileLoader()
 
     init() {
+        NSLog("🟣 ECGViewModel init()")
         loadDummyData()
     }
 
@@ -50,6 +51,12 @@ final class ECGViewModel: ObservableObject {
         ecgData = data
         statusText = "\(sourceName) — \(data.samples.count) samples @ \(Int(data.samplingRate)) Hz"
         print("✅ Loaded:", statusText)
+
+        let samples = data.samples
+        let mean = samples.reduce(0, +) / Float(samples.count)
+        let minV = samples.min() ?? 0
+        let maxV = samples.max() ?? 0
+        print(String(format: "Stats → mean: %.6f, min: %.6f, max: %.6f", mean, minV, maxV))
 
         let n = min(100, data.samples.count)
         let preview = data.samples.prefix(n)
