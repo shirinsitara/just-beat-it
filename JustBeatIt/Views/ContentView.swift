@@ -16,15 +16,38 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Waveform
-                if let data = viewModel.ecgData {
-                    ECGWaveformView(samples: data.samples)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 280)
-                        .padding(.vertical, 6)
+                // Waveform + mode switch
+                if viewModel.ecgData != nil {
+                    VStack(alignment: .leading, spacing: 10) {
+
+                        HStack {
+                            Toggle(isOn: $viewModel.showProcessed) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Processed Signal")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("Z-score normalized")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .toggleStyle(.switch)
+                        }
+
+                        ECGWaveformView(samples: viewModel.displaySamples,
+                                        color: viewModel.showProcessed ? .orange: .green
+                        )
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 280)
+                            .padding(.vertical, 6)
+                    }
+
                 } else {
-                    ContentUnavailableView("No ECG Loaded", systemImage: "waveform.path.ecg", description: Text("Import a JSON/CSV file to view the signal."))
-                        .frame(maxHeight: 320)
+                    ContentUnavailableView(
+                        "No ECG Loaded",
+                        systemImage: "waveform.path.ecg",
+                        description: Text("Import a JSON/CSV file to view the signal.")
+                    )
+                    .frame(maxHeight: 320)
                 }
 
                 // Buttons
@@ -60,11 +83,7 @@ struct ContentView: View {
         }
         .fileImporter(
             isPresented: $showImporter,
-            allowedContentTypes: [
-                .json,
-                .commaSeparatedText,
-                .plainText
-            ],
+            allowedContentTypes: [.json, .commaSeparatedText, .plainText],
             allowsMultipleSelection: false
         ) { result in
             switch result {
@@ -79,7 +98,6 @@ struct ContentView: View {
         }
     }
 }
-
 
 #Preview {
     ContentView()

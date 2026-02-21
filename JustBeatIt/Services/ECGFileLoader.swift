@@ -87,6 +87,7 @@ final class ECGFileLoader {
 
         guard !samples.isEmpty else { throw ECGFileLoaderError.emptyData }
 
-        return ECGData(samples: samples, samplingRate: defaultSamplingRate)
+        let processed = ECGProcessor.zScoreNormalize(samples)
+        return ECGData(rawSamples: samples, processedSamples: processed, samplingRate: defaultSamplingRate)
     }
 }
