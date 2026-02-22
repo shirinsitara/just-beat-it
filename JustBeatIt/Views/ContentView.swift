@@ -9,36 +9,38 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-
+                
                 // Status line
                 Text(viewModel.statusText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-
-                // Waveform + mode switch
+                
+                // Waveform + toggles
                 if viewModel.ecgData != nil {
-                    VStack(alignment: .leading, spacing: 10) {
-
-                        HStack {
-                            Toggle(isOn: $viewModel.showProcessed) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Processed Signal")
-                                        .font(.subheadline.weight(.semibold))
-                                    Text("Z-score normalized")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .toggleStyle(.switch)
+                    VStack(alignment: .leading, spacing: 12) {
+                        
+                        HStack(alignment: .top, spacing: 8) {
+                            
+                            Toggle("Processed Signal",
+                                   isOn: $viewModel.showProcessed)
+                            
+                            Toggle("Show R-Peaks",
+                                   isOn: $viewModel.showPeaks)
+                                .disabled(viewModel.rPeaks.isEmpty)
                         }
+                        .font(.subheadline.weight(.semibold))
+                        .toggleStyle(.switch)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                        ECGWaveformView(samples: viewModel.displaySamples,
-                                        color: viewModel.showProcessed ? .orange: .green
+                        ECGWaveformView(
+                            samples: viewModel.displaySamples,
+                            peakIndices: viewModel.displayPeaks,
+                            color: viewModel.showProcessed ? .orange : .green
                         )
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 280)
-                            .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 280)
+                        .padding(.vertical, 6)
                     }
 
                 } else {

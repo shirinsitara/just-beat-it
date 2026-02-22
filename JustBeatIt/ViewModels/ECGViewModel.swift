@@ -8,6 +8,8 @@ final class ECGViewModel: ObservableObject {
     @Published var statusText: String = "No file loaded."
     @Published var lastErrorText: String?
     @Published var showProcessed: Bool = true
+    @Published var rPeaks: [Int] = []
+    @Published var showPeaks: Bool = true
     
     private let loader = ECGFileLoader()
     
@@ -19,6 +21,10 @@ final class ECGViewModel: ObservableObject {
     var displaySamples: [Float] {
         guard let d = ecgData else { return [] }
         return showProcessed ? d.processedSamples : d.rawSamples
+    }
+    
+    var displayPeaks: [Int] {
+        return showPeaks ? rPeaks : []
     }
     
     func loadDummyData() {
@@ -66,6 +72,8 @@ final class ECGViewModel: ObservableObject {
                      procStats.mean, procStats.std, procStats.min, procStats.max))
         
         ecgData = ECGData(rawSamples: rawSamples, processedSamples: processed, samplingRate: samplingRate)
+        showProcessed = true
+        runRPeakDetection()
         
         statusText = "\(sourceName) — \(rawSamples.count) samples @ \(Int(samplingRate)) Hz"
         print("✅ Loaded:", statusText)
@@ -73,6 +81,19 @@ final class ECGViewModel: ObservableObject {
         let n = min(20, rawSamples.count)
         print("First \(n) RAW samples:", rawSamples.prefix(n))
         print("First \(n) PROC samples:", processed.prefix(n))
+    }
+    
+    private func runRPeakDetection() {
+        guard let data = ecgData else {
+            rPeaks = []
+            return
+        }
+
+        // Detect on processed signal
+        let peaks = RPeakDetector.detect(samples: data.processedSamples, fs: data.samplingRate)
+        rPeaks = peaks
+
+        print("❤️ R-peaks detected:", peaks.count)
     }
 }
 
