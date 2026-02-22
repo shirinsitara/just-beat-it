@@ -28,6 +28,8 @@ struct ContentView: View {
                             Toggle("Show R-Peaks",
                                    isOn: $viewModel.showPeaks)
                                 .disabled(viewModel.rPeaks.isEmpty)
+                            
+                            Toggle("Show Beat Windows", isOn: $viewModel.showWindows)
                         }
                         .font(.subheadline.weight(.semibold))
                         .toggleStyle(.switch)
@@ -35,8 +37,9 @@ struct ContentView: View {
 
                         ECGWaveformView(
                             samples: viewModel.displaySamples,
+                            color: viewModel.showProcessed ? .orange : .green,
                             peakIndices: viewModel.displayPeaks,
-                            color: viewModel.showProcessed ? .orange : .green
+                            windows: viewModel.displayWindows
                         )
                         .frame(maxWidth: .infinity)
                         .frame(height: 280)

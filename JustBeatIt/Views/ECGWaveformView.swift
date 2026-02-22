@@ -5,11 +5,13 @@ struct ECGWaveformView: View {
     let samples: [Float]
     let color: Color
     let peakIndices: [Int]
+    let windows: [BeatWindow]
     
-    init(samples: [Float], peakIndices: [Int] = [], color: Color = .green){
+    init(samples: [Float],color: Color = .green, peakIndices: [Int] = [], windows: [BeatWindow] = []){
         self.samples = samples
         self.peakIndices = peakIndices
         self.color = color
+        self.windows = windows
     }
 
     var body: some View {
@@ -25,6 +27,20 @@ struct ECGWaveformView: View {
                 // Auto scale: map max |sample| to ~40% of the view height
                 let maxAbs = samples.map { abs($0) }.max() ?? 1
                 let scale = (maxAbs > 0) ? (0.4 * height / CGFloat(maxAbs)) : 1
+                
+                // 1) Draw beat window rectangles (behind signal)
+                if !windows.isEmpty {
+                    for w in windows where w.startIndex >= 0 && w.endIndex <= samples.count {
+                        let x1 = CGFloat(w.startIndex) * stepX
+                        let x2 = CGFloat(w.endIndex) * stepX
+                        let rect = CGRect(x: x1, y: 6, width: max(1, x2 - x1), height: height - 12)
+
+                        // translucent fill
+                        context.fill(Path(rect), with: .color(Color.blue.opacity(0.08)))
+                        // stroke border
+                        context.stroke(Path(rect), with: .color(Color.blue.opacity(0.35)), lineWidth: 1)
+                    }
+                }
                 
                 //Wave path
                 var path = Path()

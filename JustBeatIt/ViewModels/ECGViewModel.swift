@@ -9,7 +9,9 @@ final class ECGViewModel: ObservableObject {
     @Published var lastErrorText: String?
     @Published var showProcessed: Bool = true
     @Published var rPeaks: [Int] = []
-    @Published var showPeaks: Bool = true
+    @Published var showPeaks: Bool = false
+    @Published var beatWindows: [BeatWindow] = []
+    @Published var showWindows: Bool = false
     
     private let loader = ECGFileLoader()
     
@@ -25,6 +27,10 @@ final class ECGViewModel: ObservableObject {
     
     var displayPeaks: [Int] {
         return showPeaks ? rPeaks : []
+    }
+    
+    var displayWindows: [BeatWindow] {
+        showWindows ? beatWindows : []
     }
     
     func loadDummyData() {
@@ -92,8 +98,15 @@ final class ECGViewModel: ObservableObject {
         // Detect on processed signal
         let peaks = RPeakDetector.detect(samples: data.processedSamples, fs: data.samplingRate)
         rPeaks = peaks
+        
+        beatWindows = BeatSegmenter.windows(
+                rPeaks: peaks,
+                signalCount: data.processedSamples.count,
+                fs: data.samplingRate,
+                config: .init(preSeconds: 0.20, postSeconds: 0.40)
+            )
 
-        print("❤️ R-peaks detected:", peaks.count)
+        print("❤️ R-peaks detected:", peaks.count, "🟦 windows:", beatWindows.count)
     }
 }
 
