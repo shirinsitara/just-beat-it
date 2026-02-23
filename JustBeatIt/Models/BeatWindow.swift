@@ -5,6 +5,8 @@ struct BeatWindow: Identifiable, Hashable {
 
     let rIndex: Int
     let startIndex: Int
-    let endIndex: Int      // end is exclusive
+    let endIndex: Int
+    
+    let samples: [Float]    // 216 samples
 }
 

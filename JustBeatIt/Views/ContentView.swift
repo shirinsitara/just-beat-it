@@ -45,9 +45,10 @@ struct ContentView: View {
                             ECGWaveformView(
                                 samples: viewModel.visibleSamples,
                                 color: viewModel.showProcessed ? .orange : .green,
-                                // IMPORTANT: use VISIBLE peaks/windows for correct alignment
                                 peakIndices: viewModel.visiblePeaks,
-                                windows: viewModel.visibleWindows
+                                windowSpans: viewModel.visibleWindowSpans,
+                                beatLabels: viewModel.visibleBeatLabels,
+                                highlightedBeatIndex: viewModel.selectedBeatIndex
                             )
                             .frame(width: geo.size.width, height: 280)
                             .contentShape(Rectangle())
@@ -96,7 +97,7 @@ struct ContentView: View {
                         .frame(height: 280)
                         .padding(.vertical, 6)
 
-                        // Zoom slider (dynamic max so it never exceeds duration)
+                        // Zoom slider
                         let total = viewModel.totalDuration
                         let zoomMin: Double = 2.0
                         let zoomMaxHard: Double = 12.0
@@ -116,6 +117,49 @@ struct ContentView: View {
                         .onChange(of: viewModel.ecgData?.id) { _ in
                             viewModel.startTime = 0
                             viewModel.clampViewport()
+                        }
+                        
+                        // MARK: - Beat Inspector
+                        if let beat = viewModel.selectedBeat {
+
+                            VStack(alignment: .leading, spacing: 8) {
+
+                                Divider()
+
+                                Text("Viewing Beat #\(viewModel.selectedBeatIndex + 1) of \(viewModel.beatWindows.count)")
+                                    .font(.caption)
+                                    .bold()
+
+                                // RR + HR display
+                                if viewModel.selectedBeatIndex > 0 &&
+                                   viewModel.rrIntervals.indices.contains(viewModel.selectedBeatIndex - 1) {
+
+                                    let rr = viewModel.rrIntervals[viewModel.selectedBeatIndex - 1]
+                                    let hr = viewModel.instantaneousHR[viewModel.selectedBeatIndex - 1]
+
+                                    Text(String(format: "RR: %.3f s   HR: %.1f bpm", rr, hr))
+                                        .font(.caption)
+                                }
+
+                                // Beat selector slider
+                                Slider(
+                                    value: Binding(
+                                        get: { Double(viewModel.selectedBeatIndex) },
+                                        set: { viewModel.selectedBeatIndex = Int($0.rounded()) }
+                                    ),
+                                    in: 0...Double(max(0, viewModel.beatWindows.count - 1)),
+                                    step: 1
+                                )
+
+                                // Mini beat waveform
+                                ECGWaveformView(
+                                    samples: beat.samples,
+                                    color: .pink,
+                                    peakIndices: [],
+                                    windowSpans: []
+                                )
+                                .frame(height: 140)
+                            }
                         }
                     }
 

@@ -11,6 +11,7 @@ final class ECGViewModel: ObservableObject {
     @Published var rPeaks: [Int] = []
     @Published var showPeaks: Bool = false
     @Published var beatWindows: [BeatWindow] = []
+    @Published var selectedBeatIndex: Int = 0
     @Published var showWindows: Bool = false
     @Published var zoomSeconds: Double = 6.0
     @Published var startTime: Double = 0.0
@@ -39,6 +40,25 @@ final class ECGViewModel: ObservableObject {
         guard let d = ecgData else { return 0 }
         return Double(displaySamples.count) / d.samplingRate
     }
+    
+    var selectedBeat: BeatWindow? {
+        guard beatWindows.indices.contains(selectedBeatIndex) else { return nil }
+        return beatWindows[selectedBeatIndex]
+    }
+    
+    var visibleRange: Range<Int> {
+        guard let data = ecgData, data.samplingRate > 0 else {
+            return 0..<0
+        }
+
+        let fs = data.samplingRate
+
+        let startIdx = max(0, Int(startTime * fs))
+        let count = max(10, Int(zoomSeconds * fs))
+        let endIdx = min(displaySamples.count, startIdx + count)
+
+        return startIdx..<endIdx
+    }
 
     var visibleSamples: [Float] {
         guard let d = ecgData else { return [] }
@@ -64,19 +84,42 @@ final class ECGViewModel: ObservableObject {
             .map { $0 - startIdx }
     }
 
-    var visibleWindows: [BeatWindow] {
-        guard let d = ecgData else { return [] }
-        let fs = d.samplingRate
-        let startIdx = max(0, Int(startTime * fs))
-        let endIdx = min(displaySamples.count, startIdx + Int(zoomSeconds * fs))
+    var visibleWindowSpans: [WindowSpan] {
+        let r = visibleRange
+        guard r.lowerBound < r.upperBound else { return [] }
 
-        // clip to viewport and shift indices to local coordinates
         return displayWindows.compactMap { w in
-            guard w.endIndex > startIdx, w.startIndex < endIdx else { return nil }
-            let s = max(w.startIndex, startIdx) - startIdx
-            let e = min(w.endIndex, endIdx) - startIdx
-            return BeatWindow(rIndex: w.rIndex - startIdx, startIndex: s, endIndex: e)
+            guard w.endIndex > r.lowerBound, w.startIndex < r.upperBound else { return nil }
+            let s = max(w.startIndex, r.lowerBound) - r.lowerBound
+            let e = min(w.endIndex, r.upperBound) - r.lowerBound
+            return WindowSpan(startIndex: s, endIndex: e)
         }
+    }
+    
+    var visibleBeatLabels: [(index: Int, number: Int)] {
+        let r = visibleRange
+
+        return beatWindows.enumerated().compactMap { (i, w) in
+            guard w.rIndex >= r.lowerBound,
+                  w.rIndex < r.upperBound else { return nil }
+
+            let localIndex = w.rIndex - r.lowerBound
+            return (index: localIndex, number: i + 1)
+        }
+    }
+    
+    var rrIntervals: [Double] {
+        guard let data = ecgData else { return [] }
+        let fs = data.samplingRate
+
+        guard rPeaks.count > 1 else { return [] }
+
+        return zip(rPeaks.dropFirst(), rPeaks)
+            .map { Double($0 - $1) / fs }
+    }
+    
+    var instantaneousHR: [Double] {
+        rrIntervals.map { 60.0 / $0 }
     }
     
     func clampViewport() {
@@ -161,11 +204,10 @@ final class ECGViewModel: ObservableObject {
         let peaks = RPeakDetector.detect(samples: data.processedSamples, fs: data.samplingRate)
         rPeaks = peaks
         
-        beatWindows = BeatSegmenter.windows(
+        beatWindows = BeatSegmenter.segment(
+            samples: data.processedSamples,
                 rPeaks: peaks,
-                signalCount: data.processedSamples.count,
-                fs: data.samplingRate,
-                config: .init(preSeconds: 0.20, postSeconds: 0.40)
+                fs: data.samplingRate
             )
 
         print("❤️ R-peaks detected:", peaks.count, "🟦 windows:", beatWindows.count)
