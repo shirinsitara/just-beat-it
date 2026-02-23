@@ -12,6 +12,8 @@ final class ECGViewModel: ObservableObject {
     @Published var showPeaks: Bool = false
     @Published var beatWindows: [BeatWindow] = []
     @Published var showWindows: Bool = false
+    @Published var zoomSeconds: Double = 6.0
+    @Published var startTime: Double = 0.0
     
     private let loader = ECGFileLoader()
     
@@ -31,6 +33,66 @@ final class ECGViewModel: ObservableObject {
     
     var displayWindows: [BeatWindow] {
         showWindows ? beatWindows : []
+    }
+    
+    var totalDuration: Double {
+        guard let d = ecgData else { return 0 }
+        return Double(displaySamples.count) / d.samplingRate
+    }
+
+    var visibleSamples: [Float] {
+        guard let d = ecgData else { return [] }
+        let fs = d.samplingRate
+
+        let startIdx = max(0, Int(startTime * fs))
+        let count = max(10, Int(zoomSeconds * fs))
+        let endIdx = min(displaySamples.count, startIdx + count)
+
+        guard startIdx < endIdx else { return [] }
+        return Array(displaySamples[startIdx..<endIdx])
+    }
+
+    var visiblePeaks: [Int] {
+        guard let d = ecgData else { return [] }
+        let fs = d.samplingRate
+        let startIdx = max(0, Int(startTime * fs))
+        let endIdx = min(displaySamples.count, startIdx + Int(zoomSeconds * fs))
+
+        // Convert global indices -> local indices for the visible slice
+        return displayPeaks
+            .filter { $0 >= startIdx && $0 < endIdx }
+            .map { $0 - startIdx }
+    }
+
+    var visibleWindows: [BeatWindow] {
+        guard let d = ecgData else { return [] }
+        let fs = d.samplingRate
+        let startIdx = max(0, Int(startTime * fs))
+        let endIdx = min(displaySamples.count, startIdx + Int(zoomSeconds * fs))
+
+        // clip to viewport and shift indices to local coordinates
+        return displayWindows.compactMap { w in
+            guard w.endIndex > startIdx, w.startIndex < endIdx else { return nil }
+            let s = max(w.startIndex, startIdx) - startIdx
+            let e = min(w.endIndex, endIdx) - startIdx
+            return BeatWindow(rIndex: w.rIndex - startIdx, startIndex: s, endIndex: e)
+        }
+    }
+    
+    func clampViewport() {
+        guard totalDuration.isFinite else { return }
+
+        let zoomMin: Double = 2.0
+        let zoomMaxHard: Double = 12.0
+        let zoomMax = max(zoomMin, min(zoomMaxHard, totalDuration))
+
+        if !zoomSeconds.isFinite || zoomSeconds <= 0 { zoomSeconds = 6.0 }
+        zoomSeconds = min(max(zoomSeconds, zoomMin), zoomMax)
+
+        if !startTime.isFinite || startTime < 0 { startTime = 0 }
+
+        let maxStart = max(0, totalDuration - zoomSeconds)
+        if startTime > maxStart { startTime = maxStart }
     }
     
     func loadDummyData() {
