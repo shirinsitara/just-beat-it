@@ -7,15 +7,17 @@ struct ECGWaveformView: View {
     let peakIndices: [Int]
     let windowSpans: [WindowSpan]
     let beatLabels: [(index: Int, number: Int)]
-    let highlightedBeatIndex: Int?
+    let highlightedBeatNumber: Int?
+    let showBeatLabels: Bool?
     
-    init(samples: [Float],color: Color = .green, peakIndices: [Int] = [], windowSpans: [WindowSpan] = [], beatLabels: [(index: Int, number: Int)] = [],highlightedBeatIndex: Int? = nil){
+    init(samples: [Float],color: Color = .green, peakIndices: [Int] = [], windowSpans: [WindowSpan] = [], beatLabels: [(index: Int, number: Int)] = [],highlightedBeatNumber: Int? = nil, showBeatLabels: Bool? = false){
         self.samples = samples
         self.peakIndices = peakIndices
         self.color = color
         self.windowSpans = windowSpans
         self.beatLabels = beatLabels
-        self.highlightedBeatIndex = highlightedBeatIndex
+        self.highlightedBeatNumber = highlightedBeatNumber
+        self.showBeatLabels = showBeatLabels
     }
 
     var body: some View {
@@ -33,36 +35,35 @@ struct ECGWaveformView: View {
                 let scale = (maxAbs > 0) ? (0.4 * height / CGFloat(maxAbs)) : 1
                 
                 // 1) Draw beat window rectangles
-                for (i, w) in windowSpans.enumerated() {
+                for w in windowSpans {
+                    let x1 = CGFloat(w.startIndex) * stepX
+                    let x2 = CGFloat(w.endIndex) * stepX
 
-                                    let x1 = CGFloat(w.startIndex) * stepX
-                                    let x2 = CGFloat(w.endIndex) * stepX
+                    let rect = CGRect(
+                        x: x1,
+                        y: 6,
+                        width: max(1, x2 - x1),
+                        height: height - 12
+                    )
 
-                                    let rect = CGRect(
-                                        x: x1,
-                                        y: 6,
-                                        width: max(1, x2 - x1),
-                                        height: height - 12
-                                    )
+                    let path = Path(rect)
+                    let isSelected = (highlightedBeatNumber != nil && w.beatNumber == highlightedBeatNumber!)
 
-                                    let path = Path(rect)
-                                    let isSelected = (highlightedBeatIndex == i)
+                    if isSelected {
+                        context.fill(Path(rect), with: .color(Color.pink.opacity(0.08)))
+                        context.stroke(
+                            path,
+                            with: .color(.pink),
+                            lineWidth: 2.5
+                        )
+                    } else {
+                        // translucent fill
+                        context.fill(Path(rect), with: .color(Color.blue.opacity(0.08)))
+                        // stroke border
+                        context.stroke(Path(rect), with: .color(Color.blue.opacity(0.35)), lineWidth: 1)
+                    }
+                }
 
-                                    if isSelected {
-                                        context.fill(Path(rect), with: .color(Color.pink.opacity(0.08)))
-                                        context.stroke(
-                                            path,
-                                            with: .color(.pink),
-                                            lineWidth: 2.5
-                                        )
-                                    } else {
-                                        // translucent fill
-                                        context.fill(Path(rect), with: .color(Color.blue.opacity(0.08)))
-                                        // stroke border
-                                        context.stroke(Path(rect), with: .color(Color.blue.opacity(0.35)), lineWidth: 1)
-                                    }
-                                }
-                
                 //Wave path
                 var path = Path()
                 path.move(to: CGPoint(x: 0, y: midY - CGFloat(samples[0]) * scale))
@@ -87,14 +88,16 @@ struct ECGWaveformView: View {
                 }
                 
                 // beat labels
-                for label in beatLabels {
-                    let x = CGFloat(label.index) * stepX
-
-                    let text = Text("\(label.number)")
-                        .font(.caption2)
-                        .foregroundColor(.white)
-
-                    context.draw(text, at: CGPoint(x: x, y: 14))
+                if showBeatLabels ?? false {
+                    for label in beatLabels {
+                        let x = CGFloat(label.index) * stepX
+                        
+                        let text = Text("\(label.number)")
+                            .font(.caption2)
+                            .foregroundColor(.white)
+                        
+                        context.draw(text, at: CGPoint(x: x, y: 14))
+                    }
                 }
                 
             }

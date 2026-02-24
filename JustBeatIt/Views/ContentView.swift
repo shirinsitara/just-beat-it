@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var showImporter = false
     @State private var dragStartTime: Double? = nil
     @State private var lastMagnification: Double = 1.0
+    @State private var showBeatInspector = false
 
     var body: some View {
         NavigationStack {
@@ -48,7 +49,8 @@ struct ContentView: View {
                                 peakIndices: viewModel.visiblePeaks,
                                 windowSpans: viewModel.visibleWindowSpans,
                                 beatLabels: viewModel.visibleBeatLabels,
-                                highlightedBeatIndex: viewModel.selectedBeatIndex
+                                highlightedBeatNumber: viewModel.selectedBeatIndex + 1,
+                                showBeatLabels: viewModel.showWindows
                             )
                             .frame(width: geo.size.width, height: 280)
                             .contentShape(Rectangle())
@@ -116,29 +118,64 @@ struct ContentView: View {
                         }
                         .onChange(of: viewModel.ecgData?.id) { _ in
                             viewModel.startTime = 0
+                            showBeatInspector = false
                             viewModel.clampViewport()
                         }
                         
-                        // MARK: - Beat Inspector
-                        if let beat = viewModel.selectedBeat {
+                        // Beat Inspector toggle button
+                        HStack {
+                            Button {
+                                withAnimation(.easeInOut) {
+                                    showBeatInspector.toggle()
+                                }
+                            } label: {
+                                Label(
+                                    showBeatInspector ? "Hide Beat Inspector" : "Show Beat Inspector",
+                                    systemImage: showBeatInspector ? "chevron.down" : "chevron.up"
+                                )
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(viewModel.beatWindows.isEmpty)
+
+                            if viewModel.beatWindows.isEmpty {
+                                Text("Detect beats to inspect.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+                        }
+                        
+                        // MARK: - Beat Inspector (only when user asks)
+                        if showBeatInspector, let beat = viewModel.selectedBeat {
 
                             VStack(alignment: .leading, spacing: 8) {
 
                                 Divider()
+
+                                HStack {
+                                    Text("Beat Inspector")
+                                        .font(.headline)
+
+                                    Spacer()
+
+                                    Button("Hide") {
+                                        withAnimation(.easeInOut) {
+                                            showBeatInspector = false
+                                        }
+                                    }
+                                    .font(.subheadline)
+                                }
 
                                 Text("Viewing Beat #\(viewModel.selectedBeatIndex + 1) of \(viewModel.beatWindows.count)")
                                     .font(.caption)
                                     .bold()
 
                                 // RR + HR display
-                                if viewModel.selectedBeatIndex > 0 &&
-                                   viewModel.rrIntervals.indices.contains(viewModel.selectedBeatIndex - 1) {
-
-                                    let rr = viewModel.rrIntervals[viewModel.selectedBeatIndex - 1]
-                                    let hr = viewModel.instantaneousHR[viewModel.selectedBeatIndex - 1]
+                                if let rr = viewModel.rrForSelectedBeat(),
+                                   let hr = viewModel.hrForSelectedBeat() {
 
                                     Text(String(format: "RR: %.3f s   HR: %.1f bpm", rr, hr))
-                                        .font(.caption)
                                 }
 
                                 // Beat selector slider
@@ -150,6 +187,9 @@ struct ContentView: View {
                                     in: 0...Double(max(0, viewModel.beatWindows.count - 1)),
                                     step: 1
                                 )
+                                .onChange(of: viewModel.selectedBeatIndex) { _ in
+                                    viewModel.scrollToSelectedBeat()
+                                }
 
                                 // Mini beat waveform
                                 ECGWaveformView(
@@ -160,6 +200,7 @@ struct ContentView: View {
                                 )
                                 .frame(height: 140)
                             }
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
                     }
 

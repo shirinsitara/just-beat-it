@@ -18,6 +18,7 @@ struct BeatSegmenter {
 
         let pre = Int(config.preSeconds * fs)   // 72 at 360 Hz
         let post = Int(config.postSeconds * fs) // 144 at 360 Hz
+        let winLen = pre + post // end-exclusive
 
         var out: [BeatWindow] = []
         out.reserveCapacity(rPeaks.count)
@@ -42,5 +43,12 @@ struct BeatSegmenter {
         }
 
         return out
+    }
+    
+    static func rrIntervals(rPeaks: [Int], fs: Double) -> [Double] {
+        guard rPeaks.count >= 2, fs > 0 else { return [] }
+        return zip(rPeaks.dropFirst(), rPeaks).map { (curr, prev) in
+            Double(curr - prev) / fs
+        }
     }
 }

@@ -83,16 +83,20 @@ final class ECGViewModel: ObservableObject {
             .filter { $0 >= startIdx && $0 < endIdx }
             .map { $0 - startIdx }
     }
+    
+    var displayBeatWindows: [BeatWindow] {
+        showWindows ? beatWindows : []
+    }
 
     var visibleWindowSpans: [WindowSpan] {
         let r = visibleRange
         guard r.lowerBound < r.upperBound else { return [] }
 
-        return displayWindows.compactMap { w in
+        return displayBeatWindows.enumerated().compactMap { (i, w) in
             guard w.endIndex > r.lowerBound, w.startIndex < r.upperBound else { return nil }
             let s = max(w.startIndex, r.lowerBound) - r.lowerBound
             let e = min(w.endIndex, r.upperBound) - r.lowerBound
-            return WindowSpan(startIndex: s, endIndex: e)
+            return WindowSpan(startIndex: s, endIndex: e, beatNumber: i + 1)
         }
     }
     
@@ -118,8 +122,15 @@ final class ECGViewModel: ObservableObject {
             .map { Double($0 - $1) / fs }
     }
     
-    var instantaneousHR: [Double] {
-        rrIntervals.map { 60.0 / $0 }
+    func rrForSelectedBeat() -> Double? {
+        let i = selectedBeatIndex
+        guard i > 0, rrIntervals.indices.contains(i - 1) else { return nil }
+        return rrIntervals[i - 1]
+    }
+
+    func hrForSelectedBeat() -> Double? {
+        guard let rr = rrForSelectedBeat() else { return nil }
+        return 60.0 / rr
     }
     
     func clampViewport() {
@@ -136,6 +147,19 @@ final class ECGViewModel: ObservableObject {
 
         let maxStart = max(0, totalDuration - zoomSeconds)
         if startTime > maxStart { startTime = maxStart }
+    }
+    
+    func scrollToSelectedBeat() {
+        guard let data = ecgData,
+              beatWindows.indices.contains(selectedBeatIndex) else { return }
+
+        let fs = data.samplingRate
+        let r = beatWindows[selectedBeatIndex].rIndex
+        let rTime = Double(r) / fs
+
+        // center selected beat in viewport
+        startTime = max(0, rTime - zoomSeconds * 0.33)
+        clampViewport()
     }
     
     func loadDummyData() {
