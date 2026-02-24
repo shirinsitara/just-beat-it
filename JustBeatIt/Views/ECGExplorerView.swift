@@ -1,18 +1,25 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ContentView: View {
-
+struct ECGExplorerView: View {
+    
+    let entryURL: URL?
+    
+    init(entryURL: URL? = nil) {
+        self.entryURL = entryURL
+    }
+    
     @StateObject private var viewModel = ECGViewModel()
     @State private var showImporter = false
     @State private var dragStartTime: Double? = nil
     @State private var lastMagnification: Double = 1.0
     @State private var showBeatInspector = false
-
+    @State private var didLoadOnce = false
+    
     var body: some View {
-        NavigationStack {
+        ScrollView {
+            
             VStack(spacing: 16) {
-                
                 // Status line
                 Text(viewModel.statusText)
                     .font(.subheadline)
@@ -21,9 +28,9 @@ struct ContentView: View {
                 
                 // Waveform + toggles
                 if viewModel.ecgData != nil {
-
+                    
                     VStack(alignment: .leading, spacing: 12) {
-
+                        
                         // Toggles
                         HStack(alignment: .top, spacing: 8) {
                             Toggle("Processed Signal", isOn: $viewModel.showProcessed)
@@ -37,12 +44,12 @@ struct ContentView: View {
                         .onChange(of: viewModel.showProcessed) { _ in viewModel.clampViewport() }
                         .onChange(of: viewModel.showPeaks) { _ in viewModel.clampViewport() }
                         .onChange(of: viewModel.showWindows) { _ in viewModel.clampViewport() }
-
+                        
                         // Interactive waveform (drag to pan, pinch to zoom)
                         GeometryReader { geo in
                             let viewWidth = max(1, geo.size.width)
                             let secondsPerPoint = viewModel.zoomSeconds / Double(viewWidth)
-
+                            
                             ECGWaveformView(
                                 samples: viewModel.visibleSamples,
                                 color: viewModel.showProcessed ? .orange : .green,
@@ -60,7 +67,7 @@ struct ContentView: View {
                                     .onChanged { value in
                                         if dragStartTime == nil { dragStartTime = viewModel.startTime }
                                         let base = dragStartTime ?? viewModel.startTime
-
+                                        
                                         // Drag right => show earlier time (move window left)
                                         let deltaSeconds = Double(value.translation.width) * secondsPerPoint
                                         viewModel.startTime = base - deltaSeconds
@@ -98,13 +105,13 @@ struct ContentView: View {
                         }
                         .frame(height: 280)
                         .padding(.vertical, 6)
-
+                        
                         // Zoom slider
                         let total = viewModel.totalDuration
                         let zoomMin: Double = 2.0
                         let zoomMaxHard: Double = 12.0
                         let zoomMax = max(zoomMin, min(zoomMaxHard, total))
-
+                        
                         HStack {
                             Text("Zoom")
                             Slider(value: $viewModel.zoomSeconds, in: zoomMin...zoomMax)
@@ -136,29 +143,29 @@ struct ContentView: View {
                             }
                             .buttonStyle(.bordered)
                             .disabled(viewModel.beatWindows.isEmpty)
-
+                            
                             if viewModel.beatWindows.isEmpty {
                                 Text("Detect beats to inspect.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
-
+                            
                             Spacer()
                         }
                         
                         // MARK: - Beat Inspector (only when user asks)
                         if showBeatInspector, let beat = viewModel.selectedBeat {
-
+                            
                             VStack(alignment: .leading, spacing: 8) {
-
+                                
                                 Divider()
-
+                                
                                 HStack {
                                     Text("Beat Inspector")
                                         .font(.headline)
-
+                                    
                                     Spacer()
-
+                                    
                                     Button("Hide") {
                                         withAnimation(.easeInOut) {
                                             showBeatInspector = false
@@ -166,18 +173,18 @@ struct ContentView: View {
                                     }
                                     .font(.subheadline)
                                 }
-
+                                
                                 Text("Viewing Beat #\(viewModel.selectedBeatIndex + 1) of \(viewModel.beatWindows.count)")
                                     .font(.caption)
                                     .bold()
-
+                                
                                 // RR + HR display
                                 if let rr = viewModel.rrForSelectedBeat(),
                                    let hr = viewModel.hrForSelectedBeat() {
-
+                                    
                                     Text(String(format: "RR: %.3f s   HR: %.1f bpm", rr, hr))
                                 }
-
+                                
                                 // Beat selector slider
                                 Slider(
                                     value: Binding(
@@ -190,7 +197,7 @@ struct ContentView: View {
                                 .onChange(of: viewModel.selectedBeatIndex) { _ in
                                     viewModel.scrollToSelectedBeat()
                                 }
-
+                                
                                 // Mini beat waveform
                                 ECGWaveformView(
                                     samples: beat.samples,
@@ -203,7 +210,7 @@ struct ContentView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
                     }
-
+                    
                 } else {
                     ContentUnavailableView(
                         "No ECG Loaded",
@@ -213,55 +220,48 @@ struct ContentView: View {
                     .frame(maxHeight: 320)
                 }
                 
-                // Buttons
-                HStack(spacing: 12) {
-                    Button {
-                        showImporter = true
-                    } label: {
-                        Label("Load ECG File", systemImage: "doc")
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button {
-                        viewModel.loadDummyData()
-                    } label: {
-                        Label("Dummy", systemImage: "sparkles")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                // Error display (if any)
-                if let err = viewModel.lastErrorText {
-                    Text("⚠️ \(err)")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                Spacer()
+//                // Buttons
+//                HStack(spacing: 12) {
+//                    Button {
+//                        showImporter = true
+//                    } label: {
+//                        Label("Load ECG File", systemImage: "doc")
+//                    }
+//                    .buttonStyle(.borderedProminent)
+//                    
+//                    Button {
+//                        viewModel.loadDummyData()
+//                    } label: {
+//                        Label("Dummy", systemImage: "sparkles")
+//                    }
+//                    .buttonStyle(.bordered)
+//                }
+//                .frame(maxWidth: .infinity, alignment: .leading)
+//                
+//                // Error display (if any)
+//                if let err = viewModel.lastErrorText {
+//                    Text("⚠️ \(err)")
+//                        .font(.footnote)
+//                        .foregroundStyle(.red)
+//                        .frame(maxWidth: .infinity, alignment: .leading)
+//                }
             }
-            .padding()
-            .navigationTitle("ECG Explorer")
         }
-        .fileImporter(
-            isPresented: $showImporter,
-            allowedContentTypes: [.json, .commaSeparatedText, .plainText],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else { return }
+        .padding()
+        .navigationTitle("ECG Explorer")
+        .onAppear {
+            guard !didLoadOnce else { return }
+            didLoadOnce = true
+            
+            if let url = entryURL {
                 viewModel.loadFromFile(url: url)
-
-            case .failure(let error):
-                viewModel.lastErrorText = error.localizedDescription
-                print("❌ Importer error:", error)
+            } else {
+                viewModel.loadDummyData()
             }
         }
     }
 }
 
 #Preview {
-    ContentView()
+    ECGExplorerView()
 }
