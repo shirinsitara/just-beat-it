@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LandingView: View {
-    enum Route: Hashable { case explorer }
+    enum Route: Hashable { case explorer(URL?) }
 
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var appearance: AppearanceManager
@@ -52,8 +52,8 @@ struct LandingView: View {
             .tint(AppTheme.tint(for: colorScheme))
             .navigationDestination(for: Route.self) { route in
                 switch route {
-                case .explorer:
-                    ECGExplorerView(entryURL: pendingURL)
+                case .explorer(let url):
+                    ECGExplorerView(entryURL: url)
                 }
             }
             .fileImporter(
@@ -65,7 +65,7 @@ struct LandingView: View {
                 case .success(let urls):
                     guard let url = urls.first else { return }
                     pendingURL = url
-                    path.append(Route.explorer)
+                    path.append(Route.explorer(url))
 
                 case .failure(let error):
                     lastErrorText = error.localizedDescription
@@ -111,17 +111,18 @@ struct LandingView: View {
 
     private var actionSection: some View {
         VStack(spacing: 14) {
-            Button {
-                pendingURL = nil
-                path.append(Route.explorer)
-            } label: {
-                Label("Use Dummy Data", systemImage: "sparkles")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-            }
-            .buttonStyle(.bordered)
-            .frame(maxWidth: 360)
+//            Button {
+//                pendingURL = nil
+//                path.append(Route.explorer)
+//            } label: {
+//                Label("Use Dummy Data", systemImage: "sparkles")
+//                    .font(.headline)
+//                    .frame(maxWidth: .infinity)
+//                    .padding(.vertical, 12)
+//            }
+//            .buttonStyle(.bordered)
+//            .frame(maxWidth: 360)
+            demoSection
 
             Button {
                 showImporter = true
@@ -264,6 +265,47 @@ struct LandingView: View {
         #endif
         .padding(.top, 20)
         .padding(.trailing, 20)
+    }
+    
+    private var demoSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Try a demo recording")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
+
+            Button {
+                openBundledDemo("demo_clean")   // <- file name without .json
+            } label: {
+                Label("Demo — Clean", systemImage: "heart")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+
+            Button {
+                openBundledDemo("demo_pvc")     // <- file name without .json
+            } label: {
+                Label("Demo — PVC", systemImage: "bolt.heart")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+        .card()
+    }
+    
+    private func openBundledDemo(_ name: String) {
+        #if SWIFT_PACKAGE
+        let url = Bundle.module.url(forResource: name, withExtension: "json")
+        #else
+        let url = Bundle.main.url(forResource: name, withExtension: "json")
+        #endif
+
+        guard let demoURL = url else {
+                lastErrorText = "Missing demo file: \(name).json"
+                return
+            }
+
+        path.append(Route.explorer(demoURL))
     }
 }
 

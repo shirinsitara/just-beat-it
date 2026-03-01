@@ -30,9 +30,8 @@ final class ECGViewModel: ObservableObject {
     private let loader = ECGFileLoader()
     private var classifier: BeatClassifierService?
     
-    init(loadDummyOnInit: Bool = true) {
+    init() {
         NSLog("🟣 ECGViewModel init()")
-        if loadDummyOnInit { loadDummyData() }
     }
     
     var displaySamples: [Float] {
@@ -250,7 +249,6 @@ final class ECGViewModel: ObservableObject {
             fs: d.samplingRate
         )
         print("🟦 Windows created:", beatWindows.count)
-        computeRhythmSummary()
         
 #if DEBUG
         let rr = rrIntervals
@@ -313,12 +311,14 @@ final class ECGViewModel: ObservableObject {
             statusText = "\(statusText) — Classified \(preds.count) beats"
             computeRhythmSummary()
             print("🧠 Classified beats:", preds.count)
+            computeRhythmSummary()
             
         } catch {
             print("❌ Core ML classification error:", error)
             beatPredictions = Array(repeating: "Other", count: beatWindows.count)
             beatProbs = Array(repeating: [:], count: beatWindows.count)
             statusText = "\(statusText) — Model error"
+            computeRhythmSummary()
         }
     }
     
@@ -680,5 +680,44 @@ final class ECGViewModel: ObservableObject {
             if beatPredictions[i] == label { return i }
         }
         return nil
+    }
+    
+    // Demo data
+    private struct DemoECGFile: Decodable {
+        let samplingRate: Double
+        let samples: [Float]
+    }
+
+    func loadBundledDemo(named fileName: String) {
+        do {
+            let data = try loadBundledData(named: fileName, ext: "json")
+            let decoded = try JSONDecoder().decode(DemoECGFile.self, from: data)
+
+            applyLoadedECG(
+                rawSamples: decoded.samples,
+                samplingRate: decoded.samplingRate,
+                sourceName: "Demo: \(fileName)"
+            )
+            lastErrorText = nil
+
+        } catch {
+            lastErrorText = "Failed to load demo: \(error.localizedDescription)"
+            statusText = "Demo load failed."
+            print("❌ Demo load error:", error)
+        }
+    }
+
+    private func loadBundledData(named name: String, ext: String) throws -> Data {
+        #if SWIFT_PACKAGE
+        guard let url = Bundle.module.url(forResource: name, withExtension: ext) else {
+            throw NSError(domain: "Demo", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing \(name).\(ext) in Bundle.module"])
+        }
+        #else
+        guard let url = Bundle.main.url(forResource: name, withExtension: ext) else {
+            throw NSError(domain: "Demo", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing \(name).\(ext) in Bundle.main"])
+        }
+        #endif
+
+        return try Data(contentsOf: url)
     }
 }

@@ -268,7 +268,7 @@ struct ECGExplorerView: View {
             if let url = entryURL {
                 viewModel.loadFromFile(url: url)
             } else {
-                viewModel.loadDummyData()
+                //viewModel.loadDummyData()
             }
         }
     }
