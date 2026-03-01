@@ -9,8 +9,26 @@ struct ECGWaveformView: View {
     let beatLabels: [(index: Int, number: Int)]
     let highlightedBeatNumber: Int?
     let showBeatLabels: Bool?
-    
-    init(samples: [Float],color: Color = .green, peakIndices: [Int] = [], windowSpans: [WindowSpan] = [], beatLabels: [(index: Int, number: Int)] = [],highlightedBeatNumber: Int? = nil, showBeatLabels: Bool? = false){
+    let fixedMaxAbs: Float?
+    let verticalFill: CGFloat
+
+    // Grid + styling
+    var showGrid: Bool = true
+    var gridStyle: GridStyle = .darkGreen
+
+    init(
+        samples: [Float],
+        color: Color = .green,
+        peakIndices: [Int] = [],
+        windowSpans: [WindowSpan] = [],
+        beatLabels: [(index: Int, number: Int)] = [],
+        highlightedBeatNumber: Int? = nil,
+        showBeatLabels: Bool? = false,
+        showGrid: Bool = true,
+        gridStyle: GridStyle = .darkGreen,
+        fixedMaxAbs: Float? = nil,
+        verticalFill: CGFloat = 0.4,
+    ) {
         self.samples = samples
         self.peakIndices = peakIndices
         self.color = color
@@ -18,10 +36,13 @@ struct ECGWaveformView: View {
         self.beatLabels = beatLabels
         self.highlightedBeatNumber = highlightedBeatNumber
         self.showBeatLabels = showBeatLabels
+        self.showGrid = showGrid
+        self.gridStyle = gridStyle
+        self.fixedMaxAbs = fixedMaxAbs
+        self.verticalFill = verticalFill
     }
-
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { _ in
             Canvas { context, size in
                 guard samples.count > 1 else { return }
 
@@ -30,11 +51,20 @@ struct ECGWaveformView: View {
                 let midY = height / 2
                 let stepX = width / CGFloat(samples.count - 1)
 
-                // Auto scale: map max |sample| to ~40% of the view height
-                let maxAbs = samples.map { abs($0) }.max() ?? 1
-                let scale = (maxAbs > 0) ? (0.4 * height / CGFloat(maxAbs)) : 1
-                
-                // 1) Draw beat window rectangles
+                // Auto scale
+                let localMaxAbs = samples.map { abs($0) }.max() ?? 1
+                let usedMaxAbs = CGFloat(fixedMaxAbs ?? localMaxAbs)
+                let scale = (usedMaxAbs > 0) ? (verticalFill * height / usedMaxAbs) : 1
+
+                // 0) Grid (behind everything)
+                if showGrid {
+                    drawECGGrid(context: &context, size: size, style: gridStyle)
+                }
+
+                // 0.5) Center baseline (slightly stronger, ECG feel)
+                drawBaseline(context: &context, size: size, midY: midY, style: gridStyle)
+
+                // 1) Beat windows - colour coded
                 for w in windowSpans {
                     let x1 = CGFloat(w.startIndex) * stepX
                     let x2 = CGFloat(w.endIndex) * stepX
@@ -46,64 +76,166 @@ struct ECGWaveformView: View {
                         height: height - 12
                     )
 
-                    let path = Path(rect)
                     let isSelected = (highlightedBeatNumber != nil && w.beatNumber == highlightedBeatNumber!)
 
                     if isSelected {
-                        context.fill(Path(rect), with: .color(Color.pink.opacity(0.08)))
+                        // Selected beat: slightly stronger fill
+                        context.fill(Path(rect), with: .color(windowFill(w.NNLabels).opacity(1.2)))
                         context.stroke(
-                            path,
-                            with: .color(.pink),
-                            lineWidth: 2.5
-                        )
+                            Path(rect.insetBy(dx: 0.8, dy: 0.8)),
+                            with: .color(Color.pink.opacity(0.55)),
+                            lineWidth: 1.2)
+                            
+                            // show beat class labels
+                            if showBeatLabels ?? false, let lbl = w.NNLabels {
+                                let textColor: Color
+                                switch lbl {
+                                case "PVC": textColor = .red
+                                case "N": textColor = .green
+                                case "Other": textColor = .orange
+                                default: textColor = .white
+                                }
+
+                                // Place at top-right INSIDE the window
+                                let padX: CGFloat = 6
+                                let padY: CGFloat = 10
+                                let labelX = rect.maxX - padX
+                                let labelY = rect.minY + padY
+
+                                let tag = Text(lbl == "Other" ? "O" : lbl)
+                                    .font(.caption2.bold())
+                                    .foregroundColor(textColor.opacity(0.95))
+
+                                context.draw(tag, at: CGPoint(x: labelX, y: labelY), anchor: .trailing)
+                            }
                     } else {
-                        // translucent fill
-                        context.fill(Path(rect), with: .color(Color.blue.opacity(0.08)))
-                        // stroke border
-                        context.stroke(Path(rect), with: .color(Color.blue.opacity(0.35)), lineWidth: 1)
+                        // Non-selected beats: very light fill
+                        context.fill(Path(rect), with: .color(windowFill(w.NNLabels)))
                     }
                 }
 
-                //Wave path
-                var path = Path()
-                path.move(to: CGPoint(x: 0, y: midY - CGFloat(samples[0]) * scale))
-
+                // 2) Wave path
+                var wave = Path()
+                wave.move(to: CGPoint(x: 0, y: midY - CGFloat(samples[0]) * scale))
                 for i in 1..<samples.count {
                     let x = CGFloat(i) * stepX
                     let y = midY - CGFloat(samples[i]) * scale
-                    path.addLine(to: CGPoint(x: x, y: y))
+                    wave.addLine(to: CGPoint(x: x, y: y))
                 }
-
-                context.stroke(path, with: .color(color), lineWidth: 1.5)
                 
-                //Peak markers
+                // glow style
+                let glowStyle = StrokeStyle(lineWidth: 3.0, lineCap: .round, lineJoin: .round)
+                let mainStyle = StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
+
+                context.stroke(wave, with: .color(color.opacity(0.18)), style: glowStyle)
+                context.stroke(wave, with: .color(color.opacity(0.95)), style: mainStyle)
+
+
+                // 3) Peak markers (white dots)
                 if !peakIndices.isEmpty {
-                    for idx in peakIndices where idx>=0 && idx < samples.count {
+                    for idx in peakIndices where idx >= 0 && idx < samples.count {
                         let x = CGFloat(idx) * stepX
                         let y = midY - CGFloat(samples[idx]) * scale
-                        
-                        let dotRect = CGRect(x: x - 2.5, y: y - 2.5, width: 5, height: 5)
+                        let dotRect = CGRect(x: x - 2.6, y: y - 2.6, width: 5.2, height: 5.2)
                         context.fill(Path(ellipseIn: dotRect), with: .color(.white))
                     }
                 }
-                
-                // beat labels
+
+                // 4) Beat labels - numbers
                 if showBeatLabels ?? false {
                     for label in beatLabels {
                         let x = CGFloat(label.index) * stepX
-                        
                         let text = Text("\(label.number)")
                             .font(.caption2)
-                            .foregroundColor(.white)
-                        
-                        context.draw(text, at: CGPoint(x: x, y: 14))
+                            .foregroundColor(.white.opacity(0.9))
+                        context.draw(text, at: CGPoint(x: x, y: 14), anchor: .center)
                     }
                 }
-                
             }
         }
-        .background(Color.black)
-        .cornerRadius(12)
+        .background(gridStyle.backgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding()
+    }
+}
+
+// MARK: - Grid styling
+
+enum GridStyle {
+    case darkGreen
+
+    var backgroundColor: Color {
+        Color.black
+    }
+
+    var smallLine: Color {
+        Color.green.opacity(0.10)
+    }
+
+    var largeLine: Color {
+        Color.green.opacity(0.22)
+    }
+
+    var baseline: Color {
+        // Slightly stronger than large grid
+        Color.green.opacity(0.35)
+    }
+}
+
+// MARK: - Grid drawing helpers
+
+private func drawECGGrid(context: inout GraphicsContext, size: CGSize, style: GridStyle) {
+    // Visual grid size (in points). Looks like ECG paper; not physically calibrated.
+    let small: CGFloat = 10          // small box
+    let big: CGFloat = small * 5     // large box
+
+    // Small grid lines
+    var smallPath = Path()
+    var x: CGFloat = 0
+    while x <= size.width {
+        smallPath.move(to: CGPoint(x: x, y: 0))
+        smallPath.addLine(to: CGPoint(x: x, y: size.height))
+        x += small
+    }
+    var y: CGFloat = 0
+    while y <= size.height {
+        smallPath.move(to: CGPoint(x: 0, y: y))
+        smallPath.addLine(to: CGPoint(x: size.width, y: y))
+        y += small
+    }
+    context.stroke(smallPath, with: .color(style.smallLine), lineWidth: 0.6)
+
+    // Large grid lines
+    var bigPath = Path()
+    x = 0
+    while x <= size.width {
+        bigPath.move(to: CGPoint(x: x, y: 0))
+        bigPath.addLine(to: CGPoint(x: x, y: size.height))
+        x += big
+    }
+    y = 0
+    while y <= size.height {
+        bigPath.move(to: CGPoint(x: 0, y: y))
+        bigPath.addLine(to: CGPoint(x: size.width, y: y))
+        y += big
+    }
+    context.stroke(bigPath, with: .color(style.largeLine), lineWidth: 1.0)
+}
+
+private func drawBaseline(context: inout GraphicsContext, size: CGSize, midY: CGFloat, style: GridStyle) {
+    var baseline = Path()
+    baseline.move(to: CGPoint(x: 0, y: midY))
+    baseline.addLine(to: CGPoint(x: size.width, y: midY))
+
+    // Slightly thicker + stronger opacity than grid
+    context.stroke(baseline, with: .color(style.baseline), lineWidth: 1.4)
+}
+
+func windowFill(_ label: String?) -> Color {
+    switch label {
+    case "PVC": return Color.red.opacity(0.14)
+    case "N": return Color.green.opacity(0.10)
+    case "Other": return Color.orange.opacity(0.12)
+    default: return Color.cyan.opacity(0.06)
     }
 }
